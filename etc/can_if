@@ -1,0 +1,142 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:           can_if
+# Required-Start:     $local_fs $syslog mountkernfs
+# Required-Stop:      $local_fs $syslog mountkernfs
+# Default-Start:      2 3 4 5
+# Default-Stop:       0 1 6
+# Short-Description:  Starts the configured CAN-Interfaces and creates virtual CAN Interfaces on the system.
+### END INIT INFO
+
+#
+# Simple script to start CAN and VCAN interfaces with netlink configuration
+#
+# Author Oliver Hartkopp, Volkswagen Group Electronic Research
+#
+
+# Exit if 'ip' from the iproute2 package is not installed
+test -x /sbin/ip || exit 0
+
+# On some systems the automatic module loading via
+# /etc/modules.conf is quite slow. To ensure the immediately 
+# availability of specific modules you can define critical
+# modules in the PROBE variable. E.g. PROBE="can-tp20"
+
+# Exit if modprobe is not installed
+test -x /sbin/modprobe || exit 0
+
+# The syntax for the CAN devices is: devname[@bitrate][,restart-ms]
+# example CAN_IF="can0 can1@500000 can2@500000,200 can3,500"
+CAN_IF=""
+
+# To modify the sampling-point and SJW settings for the in-kernel bittiming
+# calculation. "0" => set default values (CAN CIA sampling-point / sjw=1)
+SAMPOINT="0" # example for 84% : SAMPOINT=".840"
+SJW="0"      # example for max. sjw : SJW="4"
+
+# The syntax for the VCAN devices is: devname[:mtu]
+# MTU = 16 = sizeof(struct can_frame) for standard CAN2.0B frames (default)
+# MTU = 72 = sizeof(struct canfd_frame) for CAN FD frames (Linux 3.6+)
+# example VCAN_IF="vcan0:72 vcan1 vcan2 vcan3 helga:72"
+VCAN_IF="vcan0 vcan1 vcan2 vcan3"
+PROBE="vcan"
+
+case "$1" in
+	start|force-reload)
+	if [ -n "$PROBE" ] ; then
+		echo -n "Extra probing CAN modules:"
+		for MODULE in $PROBE; do
+			echo -n " "$MODULE
+			/sbin/modprobe -q $MODULE
+		done
+		echo "."
+	fi
+	if [ -n "$CAN_IF" ] ; then
+		echo -n "Enabling CAN interfaces:"
+		for IF in $CAN_IF; do
+			echo -n " "$IF
+			DEVICE=${IF%@*}
+			DEVICE=${DEVICE%,*}
+			HASBTR=`echo $IF | grep "@"`
+			if [ -n "$HASBTR" ]; then
+				BITRATE=${IF#*@}
+				BITRATE=${BITRATE%,*}
+				/sbin/ip link set $DEVICE type can bitrate $BITRATE sample-point $SAMPOINT sjw $SJW
+			fi
+			HASMS=`echo $IF | grep ","` 
+			if [ -n "$HASMS" ]; then
+				RESTARTMS=${IF#*,}
+				/sbin/ip link set $DEVICE type can restart-ms $RESTARTMS
+			fi
+			/sbin/ip link set $DEVICE up
+		done
+		echo "."
+	fi
+	if [ -n "$VCAN_IF" ] ; then
+		echo -n "Creating and enabling virtual CAN interfaces:"
+		for IF in $VCAN_IF; do
+			echo -n " "$IF
+			DEVICE=${IF%:*}
+			/sbin/ip link add name $DEVICE type vcan
+			HASMTU=`echo $IF | grep ":"` 
+			if [ -n "$HASMTU" ]; then
+				MTU=${IF#*:}
+				/sbin/ip link set $DEVICE mtu $MTU
+			fi
+			/sbin/ip link set $DEVICE up
+		done
+		echo "."
+	fi
+	;;
+	restart|reload)
+	if [ -n "$CAN_IF" ] ; then
+		echo -n "Restarting CAN interfaces:"
+		for IF in $CAN_IF; do
+			DEVICE=${IF%@*}
+			DEVICE=${DEVICE%,*}
+			echo -n " "$DEVICE
+			/sbin/ip link set $DEVICE down
+			/sbin/ip link set $DEVICE up
+		done
+		echo "."
+	fi
+	if [ -n "$VCAN_IF" ] ; then
+		echo -n "Restarting virtual CAN interfaces:"
+		for IF in $VCAN_IF; do
+			DEVICE=${IF%:*}
+			echo -n " "$DEVICE
+			/sbin/ip link set $DEVICE down
+			/sbin/ip link set $DEVICE up
+		done
+		echo "."
+	fi
+	;;
+	stop)
+	if [ -n "$CAN_IF" ] ; then
+		echo -n "Shutting down CAN interfaces:"
+		for IF in $CAN_IF; do
+			DEVICE=${IF%@*}
+			DEVICE=${DEVICE%,*}
+			echo -n " "$DEVICE
+			/sbin/ip link set $DEVICE down
+		done
+		echo "."
+	fi
+	if [ -n "$VCAN_IF" ] ; then
+		echo -n "Shutting down and removing virtual CAN interfaces:"
+		for IF in $VCAN_IF; do
+			DEVICE=${IF%:*}
+			echo -n " "$DEVICE
+			/sbin/ip link set $DEVICE down
+			/sbin/ip link del $DEVICE
+		done
+		echo "."
+	fi
+	;;
+	*)
+	echo "Usage: /etc/init.d/can_if {start|stop|restart|reload|force-reload}"
+	exit 1
+esac
+
+exit 0

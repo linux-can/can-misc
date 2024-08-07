@@ -16,16 +16,26 @@
 # Author Oliver Hartkopp, Volkswagen Group Electronic Research
 #
 
+IP=`which ip`
+
 # Exit if 'ip' from the iproute2 package is not installed
-test -x /sbin/ip || exit 0
+test -n $IP || exit 0
+
+# Exit if 'ip' from the iproute2 package is not executable
+test -x $IP || exit 0
 
 # On some systems the automatic module loading via
 # /etc/modules.conf is quite slow. To ensure the immediately 
 # availability of specific modules you can define critical
 # modules in the PROBE variable. E.g. PROBE="can-tp20"
 
+MODPROBE=`which modprobe`
+
 # Exit if modprobe is not installed
-test -x /sbin/modprobe || exit 0
+test -n $MODPROBE || exit 0
+
+# Exit if modprobe is not executable
+test -x $MODPROBE || exit 0
 
 # The syntax for the CAN devices is: devname[@bitrate][,restart-ms]
 # example CAN_IF="can0 can1@500000 can2@500000,200 can3,500"
@@ -49,7 +59,7 @@ case "$1" in
 		echo -n "Extra probing CAN modules:"
 		for MODULE in $PROBE; do
 			echo -n " "$MODULE
-			/sbin/modprobe -q $MODULE
+			$MODPROBE -q $MODULE
 		done
 		echo "."
 	fi
@@ -63,14 +73,14 @@ case "$1" in
 			if [ -n "$HASBTR" ]; then
 				BITRATE=${IF#*@}
 				BITRATE=${BITRATE%,*}
-				/sbin/ip link set $DEVICE type can bitrate $BITRATE sample-point $SAMPOINT sjw $SJW
+				$IP link set $DEVICE type can bitrate $BITRATE sample-point $SAMPOINT sjw $SJW
 			fi
 			HASMS=`echo $IF | grep ","` 
 			if [ -n "$HASMS" ]; then
 				RESTARTMS=${IF#*,}
-				/sbin/ip link set $DEVICE type can restart-ms $RESTARTMS
+				$IP link set $DEVICE type can restart-ms $RESTARTMS
 			fi
-			/sbin/ip link set $DEVICE up
+			$IP link set $DEVICE up
 		done
 		echo "."
 	fi
@@ -79,13 +89,13 @@ case "$1" in
 		for IF in $VCAN_IF; do
 			echo -n " "$IF
 			DEVICE=${IF%:*}
-			/sbin/ip link add name $DEVICE type vcan
+			$IP link add name $DEVICE type vcan
 			HASMTU=`echo $IF | grep ":"` 
 			if [ -n "$HASMTU" ]; then
 				MTU=${IF#*:}
-				/sbin/ip link set $DEVICE mtu $MTU
+				$IP link set $DEVICE mtu $MTU
 			fi
-			/sbin/ip link set $DEVICE up
+			$IP link set $DEVICE up
 		done
 		echo "."
 	fi
@@ -97,8 +107,8 @@ case "$1" in
 			DEVICE=${IF%@*}
 			DEVICE=${DEVICE%,*}
 			echo -n " "$DEVICE
-			/sbin/ip link set $DEVICE down
-			/sbin/ip link set $DEVICE up
+			$IP link set $DEVICE down
+			$IP link set $DEVICE up
 		done
 		echo "."
 	fi
@@ -107,8 +117,8 @@ case "$1" in
 		for IF in $VCAN_IF; do
 			DEVICE=${IF%:*}
 			echo -n " "$DEVICE
-			/sbin/ip link set $DEVICE down
-			/sbin/ip link set $DEVICE up
+			$IP link set $DEVICE down
+			$IP link set $DEVICE up
 		done
 		echo "."
 	fi
@@ -120,7 +130,7 @@ case "$1" in
 			DEVICE=${IF%@*}
 			DEVICE=${DEVICE%,*}
 			echo -n " "$DEVICE
-			/sbin/ip link set $DEVICE down
+			$IP link set $DEVICE down
 		done
 		echo "."
 	fi
@@ -129,8 +139,8 @@ case "$1" in
 		for IF in $VCAN_IF; do
 			DEVICE=${IF%:*}
 			echo -n " "$DEVICE
-			/sbin/ip link set $DEVICE down
-			/sbin/ip link del $DEVICE
+			$IP link set $DEVICE down
+			$IP link del $DEVICE
 		done
 		echo "."
 	fi
